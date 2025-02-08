@@ -123,16 +123,12 @@ async fn main() {
         })
         .await
         .unwrap();
-    // println!("swap_instructions: {response:?}");
 
     println!("Getting address lookup table accounts...");
     let address_lookup_table_accounts =
         get_address_lookup_table_accounts(&rpc_client, response.address_lookup_table_addresses)
             .await
             .unwrap();
-
-    // let mut instructions: Vec<Instruction> = response.setup_instructions;
-    // instructions.push(response.swap_instruction);
 
     let swap_ix_discriminator: [u8; 8] = get_discriminator("global:swap");
     let mut swap_ix_data = Vec::from(swap_ix_discriminator);
@@ -166,7 +162,6 @@ async fn main() {
     };
 
     let cu_ix = ComputeBudgetInstruction::set_compute_unit_limit(300_000);
-
     let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(1000);
 
     loop {
