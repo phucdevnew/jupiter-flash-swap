@@ -140,20 +140,23 @@ async fn main() {
     let output_token_account = get_associated_token_address(&keypair.pubkey(), &OUTPUT_MINT);
 
     let mut accounts = vec![
-        AccountMeta::new(keypair.pubkey(), true),     // payer
-        AccountMeta::new(INPUT_MINT, false),           // input mint
-        AccountMeta::new(TOKEN_PROGRAM_ID, false), // input mint program (for now, just hardcoded to SPL and not SPL 2022)
-        AccountMeta::new(OUTPUT_MINT, false),      // output mint
-        AccountMeta::new(TOKEN_PROGRAM_ID, false), // output mint program (for now, just hardcoded to SPL and not SPL 2022)
-        AccountMeta::new(vault, true),            // vault
-        AccountMeta::new(input_token_account, true), // vault input token account
-        AccountMeta::new(output_token_account, true), // vault output token account
-        AccountMeta::new(ASSOCIATED_TOKEN_PROGRAM_ID, false), // associated token program
-        AccountMeta::new(JUPITER_PROGRAM_ID, false), // jupiter program
-        AccountMeta::new(SYSTEM_PROGRAM_ID, false), // system program
+        AccountMeta::new(keypair.pubkey(), true),           // payer
+        AccountMeta::new_readonly(INPUT_MINT, false),       // input mint
+        AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false), // input mint program (for now, just hardcoded to SPL and not SPL 2022)
+        AccountMeta::new_readonly(OUTPUT_MINT, false),      // output mint
+        AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false), // output mint program (for now, just hardcoded to SPL and not SPL 2022)
+        AccountMeta::new(vault, false),                     // vault
+        AccountMeta::new(input_token_account, false),       // vault input token account
+        AccountMeta::new(output_token_account, false),      // vault output token account
+        AccountMeta::new_readonly(ASSOCIATED_TOKEN_PROGRAM_ID, false), // associated token program
+        AccountMeta::new_readonly(JUPITER_PROGRAM_ID, false), // jupiter program
+        AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false), // system program
     ];
     let remaining_accounts = response.swap_instruction.accounts;
-    accounts.extend(remaining_accounts);
+    accounts.extend(remaining_accounts.into_iter().map(|mut account| {
+        account.is_signer = false;
+        account
+    }));
 
     let swap_ix = Instruction {
         program_id: CPI_SWAP_PROGRAM_ID,
@@ -182,12 +185,17 @@ async fn main() {
     )
     .unwrap();
 
-    let tx = VersionedTransaction::try_new(VersionedMessage::V0(message), &[keypair]).unwrap();
-    let retryable_client = retryable_rpc::RetryableRpcClient::new(&rpc_url);
     println!(
         "Base64 EncodedTransaction message: {}",
-        base64::engine::general_purpose::STANDARD.encode(&tx.message.serialize())
+        base64::engine::general_purpose::STANDARD
+            .encode(VersionedMessage::V0(message.clone()).serialize())
     );
+    let tx = VersionedTransaction::try_new(VersionedMessage::V0(message), &[keypair]).unwrap();
+    let retryable_client = retryable_rpc::RetryableRpcClient::new(&rpc_url);
+    // println!(
+    //     "Base64 EncodedTransaction message: {}",
+    //     base64::engine::general_purpose::STANDARD.encode(&tx.message.serialize())
+    // );
 
     let tx_hash = retryable_client
         .send_and_confirm_transaction(&tx)
