@@ -171,7 +171,7 @@ async fn main() {
 
     let cu_ix = ComputeBudgetInstruction::set_compute_unit_limit(500_000);
     let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(10_000);
-    let heap_ix = ComputeBudgetInstruction::request_heap_frame(32768);
+    // let heap_ix = ComputeBudgetInstruction::request_heap_frame(32768);
 
     loop {
         let slot = latest_blockhash.slot.load(Ordering::Relaxed);
@@ -185,7 +185,7 @@ async fn main() {
     println!("Latest blockhash: {}", latest_blockhash);
     let message = Message::try_compile(
         &keypair.pubkey(),
-        &[cu_ix, cup_ix, heap_ix, create_output_ata_ix, swap_ix],
+        &[cu_ix, cup_ix, create_output_ata_ix, swap_ix],
         &address_lookup_table_accounts,
         *latest_blockhash,
     )
