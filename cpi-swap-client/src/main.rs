@@ -133,6 +133,7 @@ async fn main() {
     let swap_ix_discriminator: [u8; 8] = get_discriminator("global:swap");
     let mut swap_ix_data = Vec::from(swap_ix_discriminator);
     let swap_data = response.swap_instruction.data;
+    println!("swap_data: {:?}", swap_data);
     swap_ix_data.extend(swap_data);
 
     println!("Vault: {}", vault);

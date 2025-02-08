@@ -19,6 +19,7 @@ pub mod cpi_swap_program {
     use super::*;
 
     pub fn swap(ctx: Context<Swap>, data: Vec<u8>) -> Result<()> {
+        msg!("1");
         let accounts: Vec<AccountMeta> = ctx
             .remaining_accounts
             .iter()
@@ -29,6 +30,7 @@ pub mod cpi_swap_program {
             })
             .collect();
 
+        msg!("2");
         let accounts_infos: Vec<AccountInfo> = ctx
             .remaining_accounts
             .iter()
@@ -38,6 +40,10 @@ pub mod cpi_swap_program {
         // TODO: Check the first 8 bytes. Only Jupiter Route CPI allowed.
         require_keys_eq!(*ctx.accounts.jupiter_program.key, jupiter_program_id());
 
+        msg!("3");
+        let signer_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
+
+        msg!("4");
         invoke_signed(
             &Instruction {
                 program_id: ctx.accounts.jupiter_program.key(),
@@ -45,7 +51,7 @@ pub mod cpi_swap_program {
                 data,
             },
             &accounts_infos,
-            &[],
+            &[signer_seeds],
         )?;
 
         Ok(())
@@ -57,9 +63,9 @@ pub struct Swap<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    pub input_mint: InterfaceAccount<'info, Mint>,
+    pub input_mint: Box<InterfaceAccount<'info, Mint>>,
     pub input_mint_program: Interface<'info, TokenInterface>,
-    pub output_mint: InterfaceAccount<'info, Mint>,
+    pub output_mint: Box<InterfaceAccount<'info, Mint>>,
     pub output_mint_program: Interface<'info, TokenInterface>,
 
     #[account(
