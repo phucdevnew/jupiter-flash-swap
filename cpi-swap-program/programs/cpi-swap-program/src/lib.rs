@@ -27,10 +27,13 @@ pub mod cpi_swap_program {
         let accounts: Vec<AccountMeta> = ctx
             .remaining_accounts
             .iter()
-            .map(|acc| AccountMeta {
-                pubkey: *acc.key,
-                is_signer: acc.is_signer,
-                is_writable: acc.is_writable,
+            .map(|acc| {
+                let is_signer = acc.key == &ctx.accounts.vault.key();
+                AccountMeta {
+                    pubkey: *acc.key,
+                    is_signer,
+                    is_writable: acc.is_writable,
+                }
             })
             .collect();
 
