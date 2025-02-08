@@ -17,11 +17,10 @@ use solana_sdk::{
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
-    system_program::ID as SYSTEM_PROGRAM_ID,
     transaction::VersionedTransaction,
 };
 use spl_associated_token_account::{
-    get_associated_token_address, ID as ASSOCIATED_TOKEN_PROGRAM_ID,
+    get_associated_token_address, instruction::create_associated_token_account_idempotent,
 };
 use spl_token::ID as TOKEN_PROGRAM_ID;
 use std::env;
@@ -131,15 +130,22 @@ async fn main() {
             .await
             .unwrap();
 
+    println!("Vault: {}", vault);
+    let input_token_account = get_associated_token_address(&vault, &INPUT_MINT);
+    let output_token_account = get_associated_token_address(&vault, &OUTPUT_MINT);
+
+    let create_output_ata_ix = create_associated_token_account_idempotent(
+        &keypair.pubkey(),
+        &vault,
+        &OUTPUT_MINT,
+        &TOKEN_PROGRAM_ID,
+    );
+
     let swap_ix_discriminator: [u8; 8] = get_discriminator("global:swap");
     let mut swap_ix_data = Vec::from(swap_ix_discriminator);
     let swap_data = response.swap_instruction.data;
     println!("swap_data: {:?}", swap_data);
     swap_ix_data.extend(swap_data);
-
-    println!("Vault: {}", vault);
-    let input_token_account = get_associated_token_address(&keypair.pubkey(), &INPUT_MINT);
-    let output_token_account = get_associated_token_address(&keypair.pubkey(), &OUTPUT_MINT);
 
     let mut accounts = vec![
         AccountMeta::new_readonly(INPUT_MINT, false), // input mint
@@ -178,7 +184,7 @@ async fn main() {
     println!("Latest blockhash: {}", latest_blockhash);
     let message = Message::try_compile(
         &keypair.pubkey(),
-        &[swap_ix, cu_ix, cup_ix],
+        &[create_output_ata_ix, swap_ix, cu_ix, cup_ix],
         &address_lookup_table_accounts,
         *latest_blockhash,
     )
