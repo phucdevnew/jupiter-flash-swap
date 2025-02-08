@@ -3,8 +3,10 @@ use anchor_lang::{
     solana_program::{instruction::Instruction, program::invoke_signed},
 };
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use jupiter_aggregator::program::Jupiter;
 use std::str::FromStr;
 
+declare_program!(jupiter_aggregator);
 declare_id!("8KQG1MYXru73rqobftpFjD3hBD8Ab3jaag8wbjZG63sx");
 
 const VAULT_SEED: &[u8] = b"vault";
@@ -19,6 +21,9 @@ pub mod cpi_swap_program {
 
     pub fn swap(ctx: Context<Swap>, data: Vec<u8>) -> Result<()> {
         msg!("1");
+        // TODO: Check the first 8 bytes. Only Jupiter Route CPI allowed.
+        require_keys_eq!(*ctx.accounts.jupiter_program.key, jupiter_program_id());
+
         let accounts: Vec<AccountMeta> = ctx
             .remaining_accounts
             .iter()
@@ -36,13 +41,11 @@ pub mod cpi_swap_program {
             .map(|acc| AccountInfo { ..acc.clone() })
             .collect();
 
-        // TODO: Check the first 8 bytes. Only Jupiter Route CPI allowed.
-        require_keys_eq!(*ctx.accounts.jupiter_program.key, jupiter_program_id());
-
         msg!("3");
-        let signer_seeds = &[VAULT_SEED, &[ctx.bumps.vault]];
-
+        let signer_seeds: &[&[&[u8]]] = &[&[VAULT_SEED, &[ctx.bumps.vault]]];
+        // Execute swap
         msg!("4");
+
         invoke_signed(
             &Instruction {
                 program_id: ctx.accounts.jupiter_program.key(),
@@ -50,7 +53,7 @@ pub mod cpi_swap_program {
                 data,
             },
             &accounts_infos,
-            &[signer_seeds],
+            signer_seeds,
         )?;
 
         Ok(())
@@ -88,5 +91,5 @@ pub struct Swap<'info> {
     pub vault_output_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// CHECK: testing
-    pub jupiter_program: UncheckedAccount<'info>,
+    pub jupiter_program: Program<'info, Jupiter>,
 }
