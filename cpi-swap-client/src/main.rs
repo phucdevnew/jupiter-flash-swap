@@ -2,6 +2,7 @@ mod helpers;
 mod retryable_rpc;
 
 use base64::engine::Engine;
+use borsh::{BorshDeserialize, BorshSerialize};
 use helpers::{get_address_lookup_table_accounts, get_discriminator};
 use jup_swap::{
     quote::QuoteRequest, swap::SwapRequest, transaction_config::TransactionConfig,
@@ -43,6 +44,11 @@ const DEFAULT_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 struct LatestBlockhash {
     blockhash: RwLock<solana_sdk::hash::Hash>,
     slot: AtomicU64,
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct SwapIxData {
+    pub data: Vec<u8>,
 }
 
 #[tokio::main]
@@ -117,6 +123,7 @@ async fn main() {
             config: TransactionConfig {
                 skip_user_accounts_rpc_calls: true,
                 wrap_and_unwrap_sol: false,
+                use_shared_accounts: Some(true),
                 ..TransactionConfig::default()
             },
         })
@@ -140,12 +147,12 @@ async fn main() {
         &TOKEN_PROGRAM_ID,
     );
 
-    let swap_ix_discriminator: [u8; 8] = get_discriminator("global:swap");
-    let mut swap_ix_data = Vec::from(swap_ix_discriminator);
-    let swap_data = response.swap_instruction.data;
-    println!("swap_data: {:?}", swap_data);
-    swap_ix_data.extend(swap_data);
-    println!("swap_ix_data: {:?}", swap_ix_data);
+    let instruction_data = SwapIxData {
+        data: response.swap_instruction.data,
+    };
+
+    let mut serialized_data = Vec::from(get_discriminator("global:swap"));
+    instruction_data.serialize(&mut serialized_data).unwrap();
 
     let mut accounts = vec![
         AccountMeta::new_readonly(INPUT_MINT, false), // input mint
@@ -166,11 +173,11 @@ async fn main() {
     let swap_ix = Instruction {
         program_id: CPI_SWAP_PROGRAM_ID,
         accounts,
-        data: swap_ix_data,
+        data: serialized_data,
     };
 
     let cu_ix = ComputeBudgetInstruction::set_compute_unit_limit(500_000);
-    let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(10_000);
+    let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(100_000);
     // let heap_ix = ComputeBudgetInstruction::request_heap_frame(32768);
 
     loop {

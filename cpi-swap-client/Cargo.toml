@@ -13,3 +13,4 @@ tokio = "1.43.0"
 jup-swap = { git = "https://github.com/jup-ag/jupiter-swap-api-client", package = 'jupiter-swap-api-client', branch = '2.1' }
 spl-token = "7.0.0"
 spl-associated-token-account = "6.0.0"
+borsh = "1.5.5"
