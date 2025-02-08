@@ -144,14 +144,14 @@ async fn main() {
     let output_token_account = get_associated_token_address(&keypair.pubkey(), &OUTPUT_MINT);
 
     let mut accounts = vec![
-        AccountMeta::new(keypair.pubkey(), false),     // payer
+        AccountMeta::new(keypair.pubkey(), true),     // payer
         AccountMeta::new(INPUT_MINT, false),           // input mint
         AccountMeta::new(TOKEN_PROGRAM_ID, false), // input mint program (for now, just hardcoded to SPL and not SPL 2022)
         AccountMeta::new(OUTPUT_MINT, false),      // output mint
         AccountMeta::new(TOKEN_PROGRAM_ID, false), // output mint program (for now, just hardcoded to SPL and not SPL 2022)
-        AccountMeta::new(vault, false),            // vault
-        AccountMeta::new(input_token_account, false), // vault input token account
-        AccountMeta::new(output_token_account, false), // vault output token account
+        AccountMeta::new(vault, true),            // vault
+        AccountMeta::new(input_token_account, true), // vault input token account
+        AccountMeta::new(output_token_account, true), // vault output token account
         AccountMeta::new(ASSOCIATED_TOKEN_PROGRAM_ID, false), // associated token program
         AccountMeta::new(JUPITER_PROGRAM_ID, false), // jupiter program
         AccountMeta::new(SYSTEM_PROGRAM_ID, false), // system program
