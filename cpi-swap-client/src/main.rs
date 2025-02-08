@@ -33,7 +33,7 @@ use tokio::sync::RwLock;
 const INPUT_MINT: Pubkey = pubkey!("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 const INPUT_AMOUNT: u64 = 1_000_000;
 const OUTPUT_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
-const SLIPPAGE_BPS: u16 = 100;
+// const SLIPPAGE_BPS: u16 = 100;
 
 const CPI_SWAP_PROGRAM_ID: Pubkey = pubkey!("8KQG1MYXru73rqobftpFjD3hBD8Ab3jaag8wbjZG63sx");
 const JUPITER_PROGRAM_ID: Pubkey = pubkey!("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
@@ -91,7 +91,7 @@ async fn main() {
         amount: INPUT_AMOUNT,
         input_mint: INPUT_MINT,
         output_mint: OUTPUT_MINT,
-        slippage_bps: SLIPPAGE_BPS,
+        // slippage_bps: SLIPPAGE_BPS,
         max_accounts: Some(15),
         ..QuoteRequest::default()
     };
@@ -170,7 +170,7 @@ async fn main() {
     };
 
     let cu_ix = ComputeBudgetInstruction::set_compute_unit_limit(300_000);
-    let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(1000);
+    let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(10_000);
 
     loop {
         let slot = latest_blockhash.slot.load(Ordering::Relaxed);
