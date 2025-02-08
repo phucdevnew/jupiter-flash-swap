@@ -2,7 +2,6 @@ use anchor_lang::{
     prelude::*,
     solana_program::{instruction::Instruction, program::invoke_signed},
 };
-use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use std::str::FromStr;
 
@@ -60,12 +59,9 @@ pub mod cpi_swap_program {
 
 #[derive(Accounts)]
 pub struct Swap<'info> {
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
-    pub input_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub input_mint: InterfaceAccount<'info, Mint>,
     pub input_mint_program: Interface<'info, TokenInterface>,
-    pub output_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub output_mint: InterfaceAccount<'info, Mint>,
     pub output_mint_program: Interface<'info, TokenInterface>,
 
     #[account(
@@ -81,20 +77,16 @@ pub struct Swap<'info> {
       associated_token::authority=vault,
       associated_token::token_program=input_mint_program,
     )]
-    pub vault_input_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub vault_input_token_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
-      init_if_needed,
-      payer=payer,
+      mut,
       associated_token::mint=output_mint,
       associated_token::authority=vault,
       associated_token::token_program=output_mint_program,
     )]
-    pub vault_output_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub vault_output_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// CHECK: testing
     pub jupiter_program: UncheckedAccount<'info>,
-    pub system_program: Program<'info, System>,
 }
