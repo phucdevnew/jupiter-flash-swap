@@ -5,10 +5,12 @@ use base64::engine::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use helpers::{get_address_lookup_table_accounts, get_discriminator};
 use jup_swap::{
-    quote::QuoteRequest, swap::SwapRequest, transaction_config::TransactionConfig,
+    quote::QuoteRequest,
+    swap::SwapRequest,
+    transaction_config::{DynamicSlippageSettings, TransactionConfig},
     JupiterSwapApiClient,
 };
-use solana_client::rpc_client::RpcClient;
+use solana_client::{rpc_client::RpcClient, rpc_config::RpcSimulateTransactionConfig};
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     compute_budget::ComputeBudgetInstruction,
@@ -32,13 +34,11 @@ use tokio;
 use tokio::sync::RwLock;
 
 const INPUT_MINT: Pubkey = pubkey!("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-const INPUT_AMOUNT: u64 = 1_000_000;
+const INPUT_AMOUNT: u64 = 2_000_000;
 const OUTPUT_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
-// const SLIPPAGE_BPS: u16 = 100;
 
 const CPI_SWAP_PROGRAM_ID: Pubkey = pubkey!("8KQG1MYXru73rqobftpFjD3hBD8Ab3jaag8wbjZG63sx");
 const JUPITER_PROGRAM_ID: Pubkey = pubkey!("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
-// const DEFAULT_RPC_URL: &str = "http://127.0.0.1:8899";
 const DEFAULT_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 
 struct LatestBlockhash {
@@ -63,6 +63,7 @@ async fn main() {
         .map(|s| s.trim().parse().expect("Failed to parse u8 value"))
         .collect();
     let keypair = Keypair::from_bytes(&keypair_bytes).unwrap();
+    let keypair_pubkey = keypair.pubkey();
 
     let rpc_client = Arc::new(RpcClient::new_with_commitment(
         rpc_url.to_string(),
@@ -97,12 +98,10 @@ async fn main() {
         amount: INPUT_AMOUNT,
         input_mint: INPUT_MINT,
         output_mint: OUTPUT_MINT,
-        // slippage_bps: SLIPPAGE_BPS,
         ..QuoteRequest::default()
     };
 
     // GET /quote
-    println!("Getting quote...");
     let quote_response = match jupiter_swap_api_client.quote(&quote_request).await {
         Ok(quote_response) => quote_response,
         Err(e) => {
@@ -110,10 +109,7 @@ async fn main() {
             return;
         }
     };
-    // println!("{quote_response:#?}");
 
-    // POST /swap-instructions
-    println!("Getting swap instructions...");
     let (vault, _) = Pubkey::find_program_address(&[b"vault"], &CPI_SWAP_PROGRAM_ID);
 
     let response = jupiter_swap_api_client
@@ -123,14 +119,17 @@ async fn main() {
             config: TransactionConfig {
                 skip_user_accounts_rpc_calls: true,
                 wrap_and_unwrap_sol: false,
-                use_shared_accounts: Some(true),
+                dynamic_compute_unit_limit: true,
+                dynamic_slippage: Some(DynamicSlippageSettings {
+                    min_bps: Some(50),
+                    max_bps: Some(1000),
+                }),
                 ..TransactionConfig::default()
             },
         })
         .await
         .unwrap();
 
-    println!("Getting address lookup table accounts...");
     let address_lookup_table_accounts =
         get_address_lookup_table_accounts(&rpc_client, response.address_lookup_table_addresses)
             .await
@@ -176,10 +175,8 @@ async fn main() {
         data: serialized_data,
     };
 
-    let cu_ix = ComputeBudgetInstruction::set_compute_unit_limit(500_000);
-    let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(100_000);
-    // let heap_ix = ComputeBudgetInstruction::request_heap_frame(32768);
-
+    let simulate_cu_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
+    let cup_ix = ComputeBudgetInstruction::set_compute_unit_price(200_000);
     loop {
         let slot = latest_blockhash.slot.load(Ordering::Relaxed);
         if slot != 0 {
@@ -187,14 +184,53 @@ async fn main() {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+    let recent_blockhash = latest_blockhash.blockhash.read().await;
 
-    let latest_blockhash = latest_blockhash.blockhash.read().await;
-    println!("Latest blockhash: {}", latest_blockhash);
+    let simulate_message = Message::try_compile(
+        &keypair_pubkey,
+        &[
+            simulate_cu_ix,
+            cup_ix.clone(),
+            create_output_ata_ix.clone(),
+            swap_ix.clone(),
+        ],
+        &address_lookup_table_accounts,
+        *recent_blockhash,
+    )
+    .unwrap();
+    let simulate_tx =
+        VersionedTransaction::try_new(VersionedMessage::V0(simulate_message), &[&keypair]).unwrap();
+    let simulated_cu = match rpc_client.simulate_transaction_with_config(
+        &simulate_tx,
+        RpcSimulateTransactionConfig {
+            replace_recent_blockhash: true,
+            ..RpcSimulateTransactionConfig::default()
+        },
+    ) {
+        Ok(simulate_result) => {
+            if simulate_result.value.err.is_some() {
+                let e = simulate_result.value.err.unwrap();
+                panic!(
+                    "Failed to simulate transaction due to {:?} logs:{:?}",
+                    e, simulate_result.value.logs
+                );
+            }
+            simulate_result.value.units_consumed.unwrap()
+        }
+        Err(e) => {
+            panic!("simulate failed: {e:#?}");
+        }
+    };
+
+    let cu_ix = ComputeBudgetInstruction::set_compute_unit_limit((simulated_cu + 10_000) as u32);
+
+    let recent_blockhash = latest_blockhash.blockhash.read().await;
+    println!("Latest blockhash: {}", recent_blockhash);
     let message = Message::try_compile(
-        &keypair.pubkey(),
+        &keypair_pubkey,
         &[cu_ix, cup_ix, create_output_ata_ix, swap_ix],
         &address_lookup_table_accounts,
-        *latest_blockhash,
+        *recent_blockhash,
     )
     .unwrap();
 
@@ -203,7 +239,7 @@ async fn main() {
         base64::engine::general_purpose::STANDARD
             .encode(VersionedMessage::V0(message.clone()).serialize())
     );
-    let tx = VersionedTransaction::try_new(VersionedMessage::V0(message), &[keypair]).unwrap();
+    let tx = VersionedTransaction::try_new(VersionedMessage::V0(message), &[&keypair]).unwrap();
     let retryable_client = retryable_rpc::RetryableRpcClient::new(&rpc_url);
 
     let tx_hash = tx.signatures[0];

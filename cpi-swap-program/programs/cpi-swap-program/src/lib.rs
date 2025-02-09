@@ -20,8 +20,6 @@ pub mod cpi_swap_program {
     use super::*;
 
     pub fn swap(ctx: Context<Swap>, data: Vec<u8>) -> Result<()> {
-        msg!("1");
-        // TODO: Check the first 8 bytes. Only Jupiter Route CPI allowed.
         require_keys_eq!(*ctx.accounts.jupiter_program.key, jupiter_program_id());
 
         let accounts: Vec<AccountMeta> = ctx
@@ -37,17 +35,13 @@ pub mod cpi_swap_program {
             })
             .collect();
 
-        msg!("2");
         let accounts_infos: Vec<AccountInfo> = ctx
             .remaining_accounts
             .iter()
             .map(|acc| AccountInfo { ..acc.clone() })
             .collect();
 
-        msg!("3");
         let signer_seeds: &[&[&[u8]]] = &[&[VAULT_SEED, &[ctx.bumps.vault]]];
-        // Execute swap
-        msg!("4");
 
         invoke_signed(
             &Instruction {
@@ -93,6 +87,5 @@ pub struct Swap<'info> {
     )]
     pub vault_output_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: testing
     pub jupiter_program: Program<'info, Jupiter>,
 }
