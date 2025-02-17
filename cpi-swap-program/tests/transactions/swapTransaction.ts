@@ -2,10 +2,8 @@ import { QuoteResponse, SwapInstructionsResponse } from "@jup-ag/api";
 import {
   AccountMeta,
   ComputeBudgetProgram,
-  Keypair,
   MessageV0,
   PublicKey,
-  TransactionInstruction,
   VersionedTransaction,
 } from "@solana/web3.js";
 import { init } from "../config";
@@ -49,26 +47,26 @@ export async function swap() {
     swapReverseIxResponse.addressLookupTableAddresses
   );
 
-  const toInAccount = await getAssociatedTokenAddress(
+  const solAta = await getAssociatedTokenAddress(
     new PublicKey(SOL_MINT),
     vaultAddress,
     true
   );
-  const toOutAccount = await getAssociatedTokenAddress(
+  const usdcAta = await getAssociatedTokenAddress(
     new PublicKey(USDC_MINT),
     vaultAddress,
     true
   );
 
-  const createAtaInIx = createAssociatedTokenAccountIdempotentInstruction(
+  const createSolAtaInIx = createAssociatedTokenAccountIdempotentInstruction(
     wallet.publicKey,
-    toInAccount,
+    solAta,
     vaultAddress,
     new PublicKey(SOL_MINT)
   );
-  const createAtaOutIx = createAssociatedTokenAccountIdempotentInstruction(
+  const createUsdcAtaOutIx = createAssociatedTokenAccountIdempotentInstruction(
     wallet.publicKey,
-    toOutAccount,
+    usdcAta,
     vaultAddress,
     new PublicKey(USDC_MINT)
   );
@@ -81,17 +79,6 @@ export async function swap() {
   const cupIx = ComputeBudgetProgram.setComputeUnitPrice({
     microLamports: 200_000,
   });
-
-  const inputAta = await getAssociatedTokenAddress(
-    new PublicKey(SOL_MINT),
-    vaultAddress,
-    true
-  );
-  const outputAta = await getAssociatedTokenAddress(
-    new PublicKey(USDC_MINT),
-    vaultAddress,
-    true
-  );
 
   const remainingAccounts: AccountMeta[] =
     swapIxResponse.swapInstruction.accounts.map((account) => ({
@@ -114,8 +101,8 @@ export async function swap() {
       outputMint: new PublicKey(USDC_MINT),
       outputMintProgram: TOKEN_PROGRAM_ID,
       vault: vaultAddress,
-      vaultInputTokenAccount: inputAta,
-      vaultOutputTokenAccount: outputAta,
+      vaultInputTokenAccount: solAta,
+      vaultOutputTokenAccount: usdcAta,
       jupiterProgram: new PublicKey(JUPITER_PROGRAM_ID),
     })
     .remainingAccounts(remainingAccounts)
@@ -129,8 +116,8 @@ export async function swap() {
       outputMint: new PublicKey(SOL_MINT),
       outputMintProgram: TOKEN_PROGRAM_ID,
       vault: vaultAddress,
-      vaultInputTokenAccount: outputAta,
-      vaultOutputTokenAccount: inputAta,
+      vaultInputTokenAccount: usdcAta,
+      vaultOutputTokenAccount: solAta,
       jupiterProgram: new PublicKey(JUPITER_PROGRAM_ID),
     })
     .remainingAccounts(remainingAccountsReverse)
@@ -143,8 +130,8 @@ export async function swap() {
     instructions: [
       simulateCuIx,
       cupIx,
-      createAtaInIx,
-      createAtaOutIx,
+      createSolAtaInIx,
+      createUsdcAtaOutIx,
       swapInstruction,
       swapReverseInstruction,
     ],
@@ -158,18 +145,26 @@ export async function swap() {
   const transaction = new VersionedTransaction(simulateMessage);
   transaction.sign([wallet]);
 
-  const result = await provider.connection.simulateTransaction(transaction, {});
-  // try {
-  //   while (blockheight < lastValidBlockHeight) {
-  //     await sleep(500);
-  //     blockheight = await provider.connection.getBlockHeight();
-  //   }
-  // } catch (error) {
-  // }
+  // const result = await provider.connection.simulateTransaction(transaction, {
+  //   sigVerify: true,
+  // });
 
-  // runSimulateTransaction(provider.connection, [wallet], wallet.publicKey, [
-  //   transaction,
-  // ]);
+  const txId = await provider.connection.sendTransaction(transaction, {
+    maxRetries: 5,
+  });
+  console.log("🚀 ~ swap ~ txId:", txId);
+  const result = await provider.connection.confirmTransaction({
+    signature: txId,
+    blockhash: lastesttBlockhash.blockhash,
+    lastValidBlockHeight: lastesttBlockhash.lastValidBlockHeight,
+  });
+  console.log("🚀 ~ swap ~ result:", result);
+
+  // const signature = await provider.connection.sendTransaction(transaction);
+  // const result = await provider.connection.confirmTransaction(
+  //   signature,
+  //   "confirmed"
+  // );
 }
 
 async function getQuote() {
@@ -236,7 +231,4 @@ async function getSwapResponse(user: PublicKey, quote: QuoteResponse) {
   } catch (error) {
     console.log("🚀 ~ getSwapResponse ~ error:", error);
   }
-}
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

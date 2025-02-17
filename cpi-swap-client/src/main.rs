@@ -33,9 +33,12 @@ use std::time::Duration;
 use tokio;
 use tokio::sync::RwLock;
 
-const INPUT_MINT: Pubkey = pubkey!("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-const INPUT_AMOUNT: u64 = 2_000_000;
-const OUTPUT_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
+// USD EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+// SOL So11111111111111111111111111111111111111112
+
+const INPUT_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
+const INPUT_AMOUNT: u64 = 20;
+const OUTPUT_MINT: Pubkey = pubkey!("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
 const CPI_SWAP_PROGRAM_ID: Pubkey = pubkey!("8KQG1MYXru73rqobftpFjD3hBD8Ab3jaag8wbjZG63sx");
 const JUPITER_PROGRAM_ID: Pubkey = pubkey!("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
@@ -53,9 +56,9 @@ pub struct SwapIxData {
 
 #[tokio::main]
 async fn main() {
-    let rpc_url = env::var("RPC_URL").unwrap_or(DEFAULT_RPC_URL.to_string());
+    let rpc_url = DEFAULT_RPC_URL.to_string();
 
-    let keypair_str = env::var("KEYPAIR").expect("KEYPAIR environment variable not set");
+    let keypair_str = "[152,88,152,250,220,149,198,252,107,48,197,42,115,172,246,149,42,193,252,79,103,137,40,140,9,160,233,137,127,159,34,158,55,116,254,213,22,206,79,12,64,21,244,25,61,56,175,11,177,61,12,84,191,245,22,151,52,155,156,166,109,122,166,89]";
     let keypair_bytes: Vec<u8> = keypair_str
         .trim_start_matches('[')
         .trim_end_matches(']')
@@ -103,7 +106,13 @@ async fn main() {
 
     // GET /quote
     let quote_response = match jupiter_swap_api_client.quote(&quote_request).await {
-        Ok(quote_response) => quote_response,
+        Ok(quote_response) => {
+            let cloned_reponse = quote_response.clone();
+            let quote_out_amount = cloned_reponse.out_amount;
+            println!("Out amount {}", quote_out_amount.to_string());
+
+            quote_response.clone()
+        }
         Err(e) => {
             println!("quote failed: {e:#?}");
             return;
@@ -137,7 +146,9 @@ async fn main() {
 
     println!("Vault: {}", vault);
     let input_token_account = get_associated_token_address(&vault, &INPUT_MINT);
+    println!("input_token_account: {}", input_token_account.to_string());
     let output_token_account = get_associated_token_address(&vault, &OUTPUT_MINT);
+    println!("output_token_account: {}", output_token_account.to_string());
 
     let create_output_ata_ix = create_associated_token_account_idempotent(
         &keypair.pubkey(),
@@ -151,6 +162,8 @@ async fn main() {
     };
 
     let mut serialized_data = Vec::from(get_discriminator("global:swap"));
+    let mut serialized_dataa = Vec::from([]);
+    instruction_data.serialize(&mut serialized_dataa).unwrap();
     instruction_data.serialize(&mut serialized_data).unwrap();
 
     let mut accounts = vec![
@@ -165,6 +178,7 @@ async fn main() {
     ];
     let remaining_accounts = response.swap_instruction.accounts;
     accounts.extend(remaining_accounts.into_iter().map(|mut account| {
+        println!("{}", account.pubkey);
         account.is_signer = false;
         account
     }));
@@ -209,7 +223,8 @@ async fn main() {
     ) {
         Ok(simulate_result) => {
             if simulate_result.value.err.is_some() {
-                let e = simulate_result.value.err.unwrap();
+                let e: solana_sdk::transaction::TransactionError =
+                    simulate_result.value.err.unwrap();
                 panic!(
                     "Failed to simulate transaction due to {:?} logs:{:?}",
                     e, simulate_result.value.logs
@@ -239,7 +254,8 @@ async fn main() {
         base64::engine::general_purpose::STANDARD
             .encode(VersionedMessage::V0(message.clone()).serialize())
     );
-    let tx = VersionedTransaction::try_new(VersionedMessage::V0(message), &[&keypair]).unwrap();
+    let tx: VersionedTransaction =
+        VersionedTransaction::try_new(VersionedMessage::V0(message), &[&keypair]).unwrap();
     let retryable_client = retryable_rpc::RetryableRpcClient::new(&rpc_url);
 
     let tx_hash = tx.signatures[0];
