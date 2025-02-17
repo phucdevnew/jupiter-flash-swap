@@ -39,14 +39,14 @@ export async function swap() {
     quoteReverse
   );
 
-  console.log(
-    "🚀 ~ swap ~ swapIxResponse: length",
-    swapIxResponse.swapInstruction.data
-  );
-
   const addressLookupTableAccounts = await getAddressLookupTableAccounts(
     provider.connection,
     swapIxResponse.addressLookupTableAddresses
+  );
+
+  const addressLookupTableAccountsReverse = await getAddressLookupTableAccounts(
+    provider.connection,
+    swapReverseIxResponse.addressLookupTableAddresses
   );
 
   const toInAccount = await getAssociatedTokenAddress(
@@ -73,9 +73,11 @@ export async function swap() {
     new PublicKey(USDC_MINT)
   );
 
+  /// Set CU to max for one transaction
   const simulateCuIx = ComputeBudgetProgram.setComputeUnitLimit({
     units: 1_400_000,
   });
+  /// Jupiter Swap requires priority fees to ensure transactions are processed quickly and successfully, especially during periods of high network congestion.
   const cupIx = ComputeBudgetProgram.setComputeUnitPrice({
     microLamports: 200_000,
   });
@@ -104,13 +106,6 @@ export async function swap() {
       pubkey: new PublicKey(account.pubkey),
     }));
 
-  console.log(
-    "🚀 ~ swap ~ Buffer.from(swapIxResponse.swapInstruction.data):",
-    Buffer.from(swapIxResponse.swapInstruction.data).join("_")
-  );
-
-  // Buffer.from(swapIxResponse.swapInstruction.data, "base64");
-
   const swapInstruction = await program.methods
     .swap(Buffer.from(swapIxResponse.swapInstruction.data, "base64"))
     .accountsPartial({
@@ -138,7 +133,7 @@ export async function swap() {
       vaultOutputTokenAccount: inputAta,
       jupiterProgram: new PublicKey(JUPITER_PROGRAM_ID),
     })
-    .remainingAccounts(remainingAccounts)
+    .remainingAccounts(remainingAccountsReverse)
     .instruction();
 
   const lastesttBlockhash = await provider.connection.getLatestBlockhash();
@@ -153,7 +148,10 @@ export async function swap() {
       swapInstruction,
       swapReverseInstruction,
     ],
-    addressLookupTableAccounts,
+    addressLookupTableAccounts: [
+      ...addressLookupTableAccounts,
+      ...addressLookupTableAccountsReverse,
+    ],
     recentBlockhash: lastesttBlockhash.blockhash,
   });
 
@@ -161,8 +159,6 @@ export async function swap() {
   transaction.sign([wallet]);
 
   const result = await provider.connection.simulateTransaction(transaction, {});
-  console.log("🚀 ~ swap ~ result:", result);
-  console.log("🚀 ~ swap ~ error:", result.value.err);
   // try {
   //   while (blockheight < lastValidBlockHeight) {
   //     await sleep(500);
@@ -197,8 +193,8 @@ async function getQuote() {
 }
 
 async function getQuoteReverse(inputAmount: string) {
-  const inputMint = SOL_MINT;
-  const outputMint = USDC_MINT;
+  const inputMint = USDC_MINT;
+  const outputMint = SOL_MINT;
   const amount = inputAmount;
   const slippageBps = 50;
 
